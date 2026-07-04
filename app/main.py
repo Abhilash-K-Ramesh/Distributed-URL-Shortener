@@ -4,14 +4,21 @@ from pydantic import BaseModel, HttpUrl
 import psycopg2
 import string
 import redis
+from dotenv import load_dotenv
+import os
+
 
 app = FastAPI()
+load_dotenv()
 redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
 
 def get_db():
     return psycopg2.connect(
-        host="localhost", port=5432,
-        dbname="urlshortener", user="postgres", password="devpass"
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT"),
+        dbname=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD")
     )
 
 class ShortenRequest(BaseModel):
