@@ -1,0 +1,80 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, HttpUrl
+import psycopg2
+import string
+import redis
+
+app = FastAPI()
+redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+def get_db():
+    return psycopg2.connect(
+        host="localhost", port=5432,
+        dbname="urlshortener", user="postgres", password="devpass"
+    )
+
+class ShortenRequest(BaseModel):
+    long_url: HttpUrl
+
+# Base62 alphabet for encoding IDs into short codes
+ALPHABET = string.digits + string.ascii_lowercase + string.ascii_uppercase
+
+def encode_base62(num: int) -> str:
+    if num == 0:
+        return ALPHABET[0]
+    result = []
+    base = len(ALPHABET)
+    while num > 0:
+        num, rem = divmod(num, base)
+        result.append(ALPHABET[rem])
+    return "".join(reversed(result))
+
+@app.post("/shorten")
+def shorten_url(req: ShortenRequest):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Check if this long URL was already shortened
+    cur.execute("SELECT short_code FROM urls WHERE long_url = %s", (str(req.long_url),))
+    existing = cur.fetchone()
+    if existing:
+        cur.close()
+        conn.close()
+        return {"short_code": existing[0]}
+
+    # Insert new row, get its auto-increment id, encode it
+    cur.execute("INSERT INTO urls (long_url) VALUES (%s) RETURNING id", (str(req.long_url),))
+    new_id = cur.fetchone()[0]
+    short_code = encode_base62(new_id)
+
+    cur.execute("UPDATE urls SET short_code = %s WHERE id = %s", (short_code, new_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return {"short_code": short_code}
+
+@app.get("/{short_code}")
+def redirect_url(short_code: str):
+
+    cached_url = redis_client.get(short_code)
+    if cached_url:
+        return RedirectResponse(url=cached_url)
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT long_url FROM urls WHERE short_code = %s", (short_code,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Short URL not found")
+    
+    long_url = row[0]
+
+    # 3. Populate cache for next time (1 hour TTL)
+    redis_client.set(short_code, long_url, ex=3600)
+    
+    return RedirectResponse(url=row[0])
