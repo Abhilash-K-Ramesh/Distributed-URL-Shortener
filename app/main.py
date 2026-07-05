@@ -6,11 +6,41 @@ import string
 import redis
 from dotenv import load_dotenv
 import os
+from fastapi import Request
+import time
+from fastapi.responses import JSONResponse
 
 
 app = FastAPI()
 load_dotenv()
 redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
+RATE_LIMIT_LUA = """
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+if current > tonumber(ARGV[2]) then
+    return 0
+end
+return 1
+"""
+
+rate_limit_script = redis_client.register_script(RATE_LIMIT_LUA)
+RATE_LIMIT_MAX = 5        # max requests
+RATE_LIMIT_WINDOW = 10    # per 10 seconds
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    client_ip = request.client.host
+    key = f"rate_limit:{client_ip}"
+
+    allowed = rate_limit_script(keys=[key], args=[RATE_LIMIT_WINDOW, RATE_LIMIT_MAX])
+
+    if allowed == 0:
+        return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Try again later."})
+
+    response = await call_next(request)
+    return response
 
 def get_db():
     return psycopg2.connect(
