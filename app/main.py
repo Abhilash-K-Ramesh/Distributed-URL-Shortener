@@ -26,15 +26,25 @@ return 1
 """
 
 rate_limit_script = redis_client.register_script(RATE_LIMIT_LUA)
-RATE_LIMIT_MAX = 5        # max requests
-RATE_LIMIT_WINDOW = 10    # per 10 seconds
+# (method, path) -> (max_requests, window_seconds)
+RATE_LIMITS = {
+    ("POST", "/shorten"): (5, 10),      # stricter: writes are more expensive
+    ("GET", "default"): (20, 10),       # more lenient: redirects are cheap, read-heavy
+}
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     client_ip = request.client.host
-    key = f"rate_limit:{client_ip}"
+    method = request.method
+    path = request.url.path
 
-    allowed = rate_limit_script(keys=[key], args=[RATE_LIMIT_WINDOW, RATE_LIMIT_MAX])
+    # Exact match first (e.g. POST /shorten), else fall back to a default per method
+    limit_key = (method, path) if (method, path) in RATE_LIMITS else (method, "default")
+    max_requests, window = RATE_LIMITS.get(limit_key, (100, 10))  # fallback if nothing matches
+
+    redis_key = f"rate_limit:{method}:{path if (method, path) in RATE_LIMITS else 'default'}:{client_ip}"
+
+    allowed = rate_limit_script(keys=[redis_key], args=[window, max_requests])
 
     if allowed == 0:
         return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded. Try again later."})
