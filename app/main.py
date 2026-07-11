@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 
 app = FastAPI()
 load_dotenv()
-redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
+redis_client = redis.Redis(host=os.getenv("REDIS_HOST", "localhost"), port=6379, decode_responses=True)
 RATE_LIMIT_LUA = """
 local current = redis.call('INCR', KEYS[1])
 if current == 1 then
