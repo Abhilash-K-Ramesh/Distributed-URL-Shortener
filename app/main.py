@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 import psycopg2
 import string
@@ -14,6 +15,12 @@ from fastapi.responses import JSONResponse
 app = FastAPI()
 load_dotenv()
 redis_client = redis.Redis(host=os.getenv("REDIS_HOST", "localhost"), port=6379, decode_responses=True)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # fine for local dev
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 RATE_LIMIT_LUA = """
 local current = redis.call('INCR', KEYS[1])
 if current == 1 then
