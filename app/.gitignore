@@ -1,5 +1,4 @@
-echo "venv/
+venv/
 __pycache__/
 *.pyc
-.env" > .gitignore
 .env
