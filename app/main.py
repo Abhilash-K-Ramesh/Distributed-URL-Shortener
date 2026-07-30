@@ -109,6 +109,10 @@ def shorten_url(req: ShortenRequest):
 
     return {"short_code": short_code}
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 @app.get("/{short_code}")
 def redirect_url(short_code: str):
 
@@ -132,3 +136,4 @@ def redirect_url(short_code: str):
     redis_client.set(short_code, long_url, ex=3600)
     
     return RedirectResponse(url=row[0])
+
