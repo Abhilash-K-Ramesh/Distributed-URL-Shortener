@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+data:
+  schema.sql: |
+    CREATE TABLE IF NOT EXISTS urls (
+        id SERIAL PRIMARY KEY,
+        long_url TEXT NOT NULL,
+        short_code VARCHAR(10) UNIQUE,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
