@@ -54,3 +54,19 @@ jobs:
       - name: Push image
         if: github.event_name == 'push'
         run: docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: self-hosted
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set lowercase image name
+        run: echo "IMAGE_NAME_LOWER=$(echo '${{ env.IMAGE_NAME }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Deploy to Minikube
+        run: |
+          kubectl set image deployment/app app=${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}:${{ github.sha }}
+          kubectl rollout status deployment/app
