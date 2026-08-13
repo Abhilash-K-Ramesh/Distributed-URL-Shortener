@@ -15,7 +15,7 @@ spec:
       containers:
         - name: app
           image: url-shortener-app:local
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
           envFrom:
